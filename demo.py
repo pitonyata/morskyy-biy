@@ -1,0 +1,379 @@
+import random
+import os
+import time
+
+class Colors:
+    BLUE = '\033[94m'
+    GREEN = '\033[92m'
+    RED = '\033[91m'
+    YELLOW = '\033[93m'
+    CYAN = '\033[96m'
+    MAGENTA = '\033[95m'
+    WHITE = '\033[97m'
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+
+class BattleshipGame:
+    def __init__(self):
+        self.size = 10
+        self.ships = {
+            'Авіаносець': 5,
+            'Лінкор': 4,
+            'Крейсер': 3,
+            'Есмінець': 3,
+            'Підводний човен': 2
+        }
+        
+        # Поля гравця
+        self.player_board = [[' ' for _ in range(self.size)] for _ in range(self.size)]
+        self.player_ships_board = [[' ' for _ in range(self.size)] for _ in range(self.size)]
+        
+        # Поля комп'ютера
+        self.computer_board = [[' ' for _ in range(self.size)] for _ in range(self.size)]
+        self.computer_ships_board = [[' ' for _ in range(self.size)] for _ in range(self.size)]
+        
+        self.player_ships_remaining = []
+        self.computer_ships_remaining = []
+        
+    def clear_screen(self):
+        os.system('cls' if os.name == 'nt' else 'clear')
+    
+    def print_board(self, board, title, hide_ships=False, show_board=None):
+        print(f"\n{Colors.BOLD}{Colors.CYAN}═══ {title} ═══{Colors.RESET}")
+        print(f"    {Colors.YELLOW}" + " ".join([chr(65 + i) for i in range(self.size)]) + Colors.RESET)
+        print(f"   {Colors.CYAN}{'─' * (self.size * 2 + 1)}{Colors.RESET}")
+        
+        for i in range(self.size):
+            row_display = f"{Colors.YELLOW}{i+1:2}{Colors.RESET} {Colors.CYAN}│{Colors.RESET}"
+            for j in range(self.size):
+                cell = board[i][j]
+                
+                if hide_ships and cell == '■':
+                    cell = ' '
+                
+                if cell == ' ':
+                    row_display += f" {Colors.BLUE}~{Colors.RESET}"
+                elif cell == '■':
+                    row_display += f" {Colors.WHITE}■{Colors.RESET}"
+                elif cell == 'X':
+                    row_display += f" {Colors.RED}X{Colors.RESET}"
+                elif cell == 'O':
+                    row_display += f" {Colors.CYAN}○{Colors.RESET}"
+                else:
+                    row_display += f" {cell}"
+            
+            row_display += f" {Colors.CYAN}│{Colors.RESET}"
+            print(row_display)
+        
+        print(f"   {Colors.CYAN}{'─' * (self.size * 2 + 1)}{Colors.RESET}")
+    
+    def print_double_board(self):
+        print(f"\n{Colors.BOLD}{Colors.MAGENTA}{'═' * 60}{Colors.RESET}")
+        print(f"{Colors.BOLD}{Colors.GREEN}      ВАШІ КОРАБЛІ{' ' * 15}ПОЛЕ ВОРОГА{Colors.RESET}")
+        print(f"{Colors.MAGENTA}{'═' * 60}{Colors.RESET}\n")
+        
+        # Заголовки
+        header = f"    {Colors.YELLOW}" + " ".join([chr(65 + i) for i in range(self.size)]) + Colors.RESET
+        print(f"{header}      {header}")
+        
+        border = f"   {Colors.CYAN}{'─' * (self.size * 2 + 1)}{Colors.RESET}"
+        print(f"{border}    {border}")
+        
+        for i in range(self.size):
+            # Ліве поле (кораблі гравця)
+            left_row = f"{Colors.YELLOW}{i+1:2}{Colors.RESET} {Colors.CYAN}│{Colors.RESET}"
+            for j in range(self.size):
+                cell = self.player_ships_board[i][j]
+                if cell == ' ':
+                    left_row += f" {Colors.BLUE}~{Colors.RESET}"
+                elif cell == '■':
+                    left_row += f" {Colors.WHITE}■{Colors.RESET}"
+                elif cell == 'X':
+                    left_row += f" {Colors.RED}X{Colors.RESET}"
+                elif cell == 'O':
+                    left_row += f" {Colors.CYAN}○{Colors.RESET}"
+            left_row += f" {Colors.CYAN}│{Colors.RESET}"
+            
+            # Праве поле (постріли по комп'ютеру)
+            right_row = f"{Colors.YELLOW}{i+1:2}{Colors.RESET} {Colors.CYAN}│{Colors.RESET}"
+            for j in range(self.size):
+                cell = self.computer_board[i][j]
+                if cell == ' ':
+                    right_row += f" {Colors.BLUE}~{Colors.RESET}"
+                elif cell == 'X':
+                    right_row += f" {Colors.RED}X{Colors.RESET}"
+                elif cell == 'O':
+                    right_row += f" {Colors.CYAN}○{Colors.RESET}"
+                else:
+                    right_row += f" {Colors.BLUE}~{Colors.RESET}"
+            right_row += f" {Colors.CYAN}│{Colors.RESET}"
+            
+            print(f"{left_row}    {right_row}")
+        
+        print(f"{border}    {border}\n")
+    
+    def is_valid_placement(self, board, row, col, size, horizontal):
+        if horizontal:
+            if col + size > self.size:
+                return False
+            for i in range(col, col + size):
+                if board[row][i] != ' ':
+                    return False
+                # Перевірка навколо
+                for dr in [-1, 0, 1]:
+                    for dc in [-1, 0, 1]:
+                        r, c = row + dr, i + dc
+                        if 0 <= r < self.size and 0 <= c < self.size:
+                            if board[r][c] == '■':
+                                return False
+        else:
+            if row + size > self.size:
+                return False
+            for i in range(row, row + size):
+                if board[i][col] != ' ':
+                    return False
+                # Перевірка навколо
+                for dr in [-1, 0, 1]:
+                    for dc in [-1, 0, 1]:
+                        r, c = i + dr, col + dc
+                        if 0 <= r < self.size and 0 <= c < self.size:
+                            if board[r][c] == '■':
+                                return False
+        return True
+    
+    def place_ship(self, board, row, col, size, horizontal):
+        positions = []
+        if horizontal:
+            for i in range(col, col + size):
+                board[row][i] = '■'
+                positions.append((row, i))
+        else:
+            for i in range(row, row + size):
+                board[i][col] = '■'
+                positions.append((i, col))
+        return positions
+    
+    def place_ships_randomly(self, board):
+        ships_positions = {}
+        for ship_name, size in self.ships.items():
+            placed = False
+            while not placed:
+                row = random.randint(0, self.size - 1)
+                col = random.randint(0, self.size - 1)
+                horizontal = random.choice([True, False])
+                
+                if self.is_valid_placement(board, row, col, size, horizontal):
+                    positions = self.place_ship(board, row, col, size, horizontal)
+                    ships_positions[ship_name] = positions
+                    placed = True
+        return ships_positions
+    
+    def place_ships_manually(self):
+        self.clear_screen()
+        print(f"{Colors.BOLD}{Colors.GREEN}╔══════════════════════════════════════╗{Colors.RESET}")
+        print(f"{Colors.BOLD}{Colors.GREEN}║     РОЗСТАВЛЯЄМО ВАШІ КОРАБЛІ! ⚓    ║{Colors.RESET}")
+        print(f"{Colors.BOLD}{Colors.GREEN}╚══════════════════════════════════════╝{Colors.RESET}\n")
+        
+        for ship_name, size in self.ships.items():
+            placed = False
+            while not placed:
+                self.print_board(self.player_ships_board, "ВАШЕ ПОЛЕ")
+                print(f"\n{Colors.YELLOW}Розміщуємо: {Colors.BOLD}{ship_name}{Colors.RESET} {Colors.YELLOW}(розмір: {size}){Colors.RESET}")
+                print(f"{Colors.CYAN}Приклад вводу: A1 h (горизонтально) або A1 v (вертикально){Colors.RESET}")
+                
+                try:
+                    inp = input(f"\n{Colors.GREEN}Введіть координати: {Colors.RESET}").strip().upper()
+                    parts = inp.split()
+                    
+                    if len(parts) != 2:
+                        print(f"{Colors.RED}❌ Невірний формат! Спробуйте ще раз.{Colors.RESET}")
+                        time.sleep(1)
+                        self.clear_screen()
+                        continue
+                    
+                    coord, direction = parts
+                    col = ord(coord[0]) - ord('A')
+                    row = int(coord[1:]) - 1
+                    horizontal = direction.upper() == 'H'
+                    
+                    if 0 <= row < self.size and 0 <= col < self.size:
+                        if self.is_valid_placement(self.player_ships_board, row, col, size, horizontal):
+                            positions = self.place_ship(self.player_ships_board, row, col, size, horizontal)
+                            self.player_ships_remaining.append({
+                                'name': ship_name,
+                                'positions': positions,
+                                'hits': []
+                            })
+                            placed = True
+                            self.clear_screen()
+                        else:
+                            print(f"{Colors.RED}❌ Неможливо розмістити корабель тут!{Colors.RESET}")
+                            time.sleep(1)
+                            self.clear_screen()
+                    else:
+                        print(f"{Colors.RED}❌ Координати поза полем!{Colors.RESET}")
+                        time.sleep(1)
+                        self.clear_screen()
+                except (ValueError, IndexError):
+                    print(f"{Colors.RED}❌ Невірний ввід! Спробуйте ще раз.{Colors.RESET}")
+                    time.sleep(1)
+                    self.clear_screen()
+    
+    def make_shot(self, board, ships_board, row, col):
+        if board[row][col] in ['X', 'O']:
+            return 'already'
+        
+        if ships_board[row][col] == '■':
+            board[row][col] = 'X'
+            ships_board[row][col] = 'X'
+            return 'hit'
+        else:
+            board[row][col] = 'O'
+            return 'miss'
+    
+    def check_ship_sunk(self, ships_list, row, col):
+        for ship in ships_list:
+            if (row, col) in ship['positions']:
+                ship['hits'].append((row, col))
+                if len(ship['hits']) == len(ship['positions']):
+                    return ship['name']
+        return None
+    
+    def computer_turn(self):
+        # Проста AI: випадковий постріл
+        while True:
+            row = random.randint(0, self.size - 1)
+            col = random.randint(0, self.size - 1)
+            if self.player_ships_board[row][col] not in ['X', 'O']:
+                return row, col
+    
+    def play(self):
+        self.clear_screen()
+        print(f"{Colors.BOLD}{Colors.CYAN}")
+        print("╔═══════════════════════════════════════════╗")
+        print("║                                           ║")
+        print("║           🌊 МОРСЬКИЙ БІЙ 🌊             ║")
+        print("║                                           ║")
+        print("╚═══════════════════════════════════════════╝")
+        print(f"{Colors.RESET}\n")
+        
+        print(f"{Colors.YELLOW}Виберіть режим розташування кораблів:{Colors.RESET}")
+        print(f"{Colors.GREEN}1{Colors.RESET} - Вручну")
+        print(f"{Colors.GREEN}2{Colors.RESET} - Автоматично (випадково)")
+        
+        choice = input(f"\n{Colors.CYAN}Ваш вибір (1/2): {Colors.RESET}").strip()
+        
+        if choice == '1':
+            self.place_ships_manually()
+        else:
+            print(f"\n{Colors.YELLOW}Розставляємо кораблі автоматично...{Colors.RESET}")
+            self.player_ships_remaining = []
+            for ship_name, positions in self.place_ships_randomly(self.player_ships_board).items():
+                self.player_ships_remaining.append({
+                    'name': ship_name,
+                    'positions': positions,
+                    'hits': []
+                })
+            time.sleep(1)
+        
+        # Розставляємо кораблі комп'ютера
+        for ship_name, positions in self.place_ships_randomly(self.computer_ships_board).items():
+            self.computer_ships_remaining.append({
+                'name': ship_name,
+                'positions': positions,
+                'hits': []
+            })
+        
+        self.clear_screen()
+        print(f"{Colors.BOLD}{Colors.GREEN}⚓ Гра почалася! Удачі! ⚓{Colors.RESET}\n")
+        time.sleep(2)
+        
+        # Головний ігровий цикл
+        game_over = False
+        while not game_over:
+            self.clear_screen()
+            self.print_double_board()
+            
+            # Хід гравця
+            print(f"\n{Colors.BOLD}{Colors.GREEN}═══ ВАШ ХІД ═══{Colors.RESET}")
+            try:
+                coord = input(f"{Colors.CYAN}Введіть координати пострілу (наприклад, A1): {Colors.RESET}").strip().upper()
+                
+                col = ord(coord[0]) - ord('A')
+                row = int(coord[1:]) - 1
+                
+                if 0 <= row < self.size and 0 <= col < self.size:
+                    result = self.make_shot(self.computer_board, self.computer_ships_board, row, col)
+                    
+                    if result == 'already':
+                        print(f"{Colors.YELLOW}⚠️  Ви вже стріляли сюди!{Colors.RESET}")
+                        time.sleep(1)
+                        continue
+                    elif result == 'hit':
+                        sunk = self.check_ship_sunk(self.computer_ships_remaining, row, col)
+                        if sunk:
+                            print(f"{Colors.RED}💥 ВЛУЧИВ! Ви потопили {sunk}!{Colors.RESET}")
+                            self.computer_ships_remaining = [s for s in self.computer_ships_remaining if s['name'] != sunk]
+                        else:
+                            print(f"{Colors.RED}💥 ВЛУЧИВ!{Colors.RESET}")
+                        time.sleep(2)
+                    else:
+                        print(f"{Colors.CYAN}💧 Міцо!{Colors.RESET}")
+                        time.sleep(1)
+                    
+                    # Перевірка перемоги гравця
+                    if not self.computer_ships_remaining:
+                        self.clear_screen()
+                        self.print_double_board()
+                        print(f"\n{Colors.BOLD}{Colors.GREEN}")
+                        print("╔═══════════════════════════════════════════╗")
+                        print("║                                           ║")
+                        print("║           🎉 ВИ ПЕРЕМОГЛИ! 🎉            ║")
+                        print("║                                           ║")
+                        print("╚═══════════════════════════════════════════╝")
+                        print(f"{Colors.RESET}")
+                        game_over = True
+                        break
+                    
+                    # Хід комп'ютера
+                    print(f"\n{Colors.YELLOW}Хід комп'ютера...{Colors.RESET}")
+                    time.sleep(1)
+                    
+                    comp_row, comp_col = self.computer_turn()
+                    comp_result = self.make_shot(self.player_board, self.player_ships_board, comp_row, comp_col)
+                    
+                    coord_str = f"{chr(65 + comp_col)}{comp_row + 1}"
+                    if comp_result == 'hit':
+                        sunk = self.check_ship_sunk(self.player_ships_remaining, comp_row, comp_col)
+                        if sunk:
+                            print(f"{Colors.RED}💥 Комп'ютер потопив ваш {sunk} на {coord_str}!{Colors.RESET}")
+                            self.player_ships_remaining = [s for s in self.player_ships_remaining if s['name'] != sunk]
+                        else:
+                            print(f"{Colors.RED}💥 Комп'ютер влучив у {coord_str}!{Colors.RESET}")
+                    else:
+                        print(f"{Colors.CYAN}Комп'ютер промахнувся на {coord_str}!{Colors.RESET}")
+                    
+                    time.sleep(2)
+                    
+                    # Перевірка перемоги комп'ютера
+                    if not self.player_ships_remaining:
+                        self.clear_screen()
+                        self.print_double_board()
+                        print(f"\n{Colors.BOLD}{Colors.RED}")
+                        print("╔═══════════════════════════════════════════╗")
+                        print("║                                           ║")
+                        print("║          😢 ВИ ПРОГРАЛИ! 😢              ║")
+                        print("║                                           ║")
+                        print("╚═══════════════════════════════════════════╝")
+                        print(f"{Colors.RESET}")
+                        game_over = True
+                else:
+                    print(f"{Colors.RED}❌ Координати поза полем!{Colors.RESET}")
+                    time.sleep(1)
+            except (ValueError, IndexError):
+                print(f"{Colors.RED}❌ Невірний ввід!{Colors.RESET}")
+                time.sleep(1)
+
+if __name__ == "__main__":
+    game = BattleshipGame()
+    game.play()
