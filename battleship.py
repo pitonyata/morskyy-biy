@@ -1,4 +1,3 @@
-
 import tkinter as tk
 from tkinter import messagebox
 import random
@@ -48,13 +47,15 @@ class Ship:
 class Board:
     """Клас ігрового поля для морського бою"""
     
-    def __init__(self, size: int = 10):
+    def __init__(self, size: int = 10, ship_sizes: List[int] = None):
         self.size = size  # Розмір поля (зазвичай 10x10)
         # Сітка зі станами клітинок
         self.grid = [[CellState.EMPTY for _ in range(size)] for _ in range(size)]
         self.ships: List[Ship] = []  # Список кораблів на полі
         # Матриця відкритих клітинок (для відстеження пострілів)
         self.revealed = [[False for _ in range(size)] for _ in range(size)]
+        # Конфігурація кораблів
+        self.ship_sizes = ship_sizes if ship_sizes else [4, 3, 3, 2, 2, 2, 1, 1, 1, 1]
     
     def can_place_ship(self, size: int, x: int, y: int, orientation: Orientation) -> bool:
         """Перевіряє, чи можна розмістити корабель у вказаній позиції"""
@@ -149,8 +150,8 @@ class Board:
     
     def place_ships_randomly(self):
         """Автоматично розміщує всі кораблі у випадкових позиціях
-        Конфігурація: 1 лінкор (4), 2 крейсери (3), 3 есмінці (2), 4 катери (1)"""
-        ship_sizes = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1]
+        Використовує конфігурацію кораблів, задану при створенні поля"""
+        ship_sizes = self.ship_sizes
         
         for size in ship_sizes:
             placed = False
@@ -164,27 +165,538 @@ class Board:
                 attempts += 1
 
 
-class BattleshipGame:
-    """Головний клас гри Морський бій з GUI"""
+class MainMenu:
+    """Головне меню гри з анімацією"""
     
     def __init__(self, root):
         self.root = root
         self.root.title("Морський бій")
-        self.root.resizable(False, False)
+        self.root.resizable(True, True)  # Дозволяємо зміну розміру
+        self.root.configure(bg='#1a1a2e')
+        
+        # Мінімальний розмір вікна
+        self.root.minsize(600, 700)
+        
+        # Центруємо вікно - адаптивні відступи
+        window_width = 650
+        window_height = 820  # Трохи більше для всіх елементів
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        
+        # Якщо екран маленький, зменшуємо вікно
+        if screen_height < 900:
+            window_height = int(screen_height * 0.9)
+        
+        x = (screen_width - window_width) // 2
+        y = (screen_height - window_height) // 2
+        self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        
+        self.selected_board_size = 10  # За замовчуванням нормальний розмір
+        
+        self.setup_menu()
+        self.animate_title()
+    
+    def setup_menu(self):
+        """Створює інтерфейс головного меню"""
+        # Головний контейнер
+        main_frame = tk.Frame(self.root, bg='#1a1a2e')
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=40, pady=40)
+        
+        # Декоративні хвилі зверху
+        wave_frame = tk.Frame(main_frame, bg='#1a1a2e', height=30)
+        wave_frame.pack(fill=tk.X, pady=(0, 20))
+        
+        wave_label = tk.Label(
+            wave_frame,
+            text="〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️",
+            font=('Arial', 16),
+            fg='#00d4ff',
+            bg='#1a1a2e'
+        )
+        wave_label.pack()
+        
+        # Заголовок з емодзі
+        self.title_label = tk.Label(
+            main_frame,
+            text="⚓ МОРСЬКИЙ БІЙ ⚓",
+            font=('Arial', 42, 'bold'),
+            fg='#00d4ff',
+            bg='#1a1a2e'
+        )
+        self.title_label.pack(pady=(20, 10))
+        
+        # Підзаголовок
+        subtitle = tk.Label(
+            main_frame,
+            text="🚢 Битва на морі 🚢",
+            font=('Arial', 18),
+            fg='#00ff88',
+            bg='#1a1a2e'
+        )
+        subtitle.pack(pady=(0, 20))
+        
+        # Блок вибору розміру поля
+        size_frame = tk.Frame(main_frame, bg='#0f3460', relief=tk.RAISED, bd=2)
+        size_frame.pack(pady=20, padx=20, fill=tk.X)
+        
+        size_title = tk.Label(
+            size_frame,
+            text="📏 ОБЕРІТЬ РОЗМІР ПОЛЯ",
+            font=('Arial', 14, 'bold'),
+            fg='#00d4ff',
+            bg='#0f3460'
+        )
+        size_title.pack(pady=(15, 10))
+        
+        # Кнопки вибору розміру
+        size_buttons_frame = tk.Frame(size_frame, bg='#0f3460')
+        size_buttons_frame.pack(pady=(5, 15))
+        
+        # Маленьке поле 6x6
+        self.small_btn = tk.Button(
+            size_buttons_frame,
+            text="🔸 МАЛЕНЬКЕ\n6×6\n5 кораблів",
+            font=('Arial', 11, 'bold'),
+            bg='#4a5568',
+            fg='#ffffff',
+            activebackground='#5a6578',
+            relief=tk.RAISED,
+            bd=3,
+            padx=15,
+            pady=12,
+            cursor='hand2',
+            command=lambda: self.select_board_size(6)
+        )
+        self.small_btn.pack(side=tk.LEFT, padx=8)
+        
+        # Нормальне поле 10x10
+        self.normal_btn = tk.Button(
+            size_buttons_frame,
+            text="🔷 НОРМАЛЬНЕ\n10×10\n10 кораблів",
+            font=('Arial', 11, 'bold'),
+            bg='#00ff88',
+            fg='#1a1a2e',
+            activebackground='#00cc6f',
+            relief=tk.SUNKEN,
+            bd=3,
+            padx=15,
+            pady=12,
+            cursor='hand2',
+            command=lambda: self.select_board_size(10)
+        )
+        self.normal_btn.pack(side=tk.LEFT, padx=8)
+        
+        # Велике поле 14x14
+        self.large_btn = tk.Button(
+            size_buttons_frame,
+            text="🔶 ВЕЛИКЕ\n14×14\n15 кораблів",
+            font=('Arial', 11, 'bold'),
+            bg='#4a5568',
+            fg='#ffffff',
+            activebackground='#5a6578',
+            relief=tk.RAISED,
+            bd=3,
+            padx=15,
+            pady=12,
+            cursor='hand2',
+            command=lambda: self.select_board_size(14)
+        )
+        self.large_btn.pack(side=tk.LEFT, padx=8)
+        
+        # Контейнер для кнопок
+        buttons_frame = tk.Frame(main_frame, bg='#1a1a2e')
+        buttons_frame.pack(pady=20)
+        
+        # Кнопка "Нова гра"
+        self.play_button = tk.Button(
+            buttons_frame,
+            text="🎮  ПОЧАТИ ГРУ",
+            font=('Arial', 18, 'bold'),
+            bg='#00ff88',
+            fg='#1a1a2e',
+            activebackground='#00cc6f',
+            relief=tk.FLAT,
+            padx=50,
+            pady=20,
+            cursor='hand2',
+            command=self.start_game
+        )
+        self.play_button.pack(pady=15)
+        
+        # Кнопка "Про гру"
+        self.about_button = tk.Button(
+            buttons_frame,
+            text="ℹ️  ПРО ГРУ",
+            font=('Arial', 16, 'bold'),
+            bg='#00d4ff',
+            fg='#1a1a2e',
+            activebackground='#00a8cc',
+            relief=tk.FLAT,
+            padx=50,
+            pady=18,
+            cursor='hand2',
+            command=self.show_about
+        )
+        self.about_button.pack(pady=15)
+        
+        # Кнопка "Вихід з гри"
+        self.exit_button = tk.Button(
+            buttons_frame,
+            text="🚪  ВИХІД З ГРИ",
+            font=('Arial', 18, 'bold'),
+            bg='#ff4444',
+            fg='#ffffff',
+            activebackground='#cc3333',
+            relief=tk.FLAT,
+            padx=50,
+            pady=20,
+            cursor='hand2',
+            command=self.exit_game
+        )
+        self.exit_button.pack(pady=15)
+        
+        # Декоративні хвилі знизу
+        bottom_wave_frame = tk.Frame(main_frame, bg='#1a1a2e')
+        bottom_wave_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(20, 0))
+        
+        bottom_wave = tk.Label(
+            bottom_wave_frame,
+            text="〰️〰️〰️〰️〰️〰️〰️〰️〰️〰️",
+            font=('Arial', 16),
+            fg='#00d4ff',
+            bg='#1a1a2e'
+        )
+        bottom_wave.pack()
+        
+        # Інформація про версію
+        version_label = tk.Label(
+            bottom_wave_frame,
+            text="версія 2.1",
+            font=('Arial', 10),
+            fg='#666666',
+            bg='#1a1a2e'
+        )
+        version_label.pack(pady=(10, 0))
+        
+        # Додаємо ефекти наведення
+        self.add_button_effects()
+    
+    def select_board_size(self, size: int):
+        """Вибір розміру ігрового поля"""
+        self.selected_board_size = size
+        
+        # Оновлюємо вигляд кнопок
+        self.small_btn.config(
+            bg='#00ff88' if size == 6 else '#4a5568',
+            fg='#1a1a2e' if size == 6 else '#ffffff',
+            relief=tk.SUNKEN if size == 6 else tk.RAISED
+        )
+        self.normal_btn.config(
+            bg='#00ff88' if size == 10 else '#4a5568',
+            fg='#1a1a2e' if size == 10 else '#ffffff',
+            relief=tk.SUNKEN if size == 10 else tk.RAISED
+        )
+        self.large_btn.config(
+            bg='#00ff88' if size == 14 else '#4a5568',
+            fg='#1a1a2e' if size == 14 else '#ffffff',
+            relief=tk.SUNKEN if size == 14 else tk.RAISED
+        )
+    
+    def add_button_effects(self):
+        """Додає ефекти наведення для кнопок"""
+        def on_enter_play(e):
+            self.play_button.config(bg='#00cc6f', font=('Arial', 19, 'bold'))
+        
+        def on_leave_play(e):
+            self.play_button.config(bg='#00ff88', font=('Arial', 18, 'bold'))
+        
+        def on_enter_about(e):
+            self.about_button.config(bg='#00a8cc', font=('Arial', 17, 'bold'))
+        
+        def on_leave_about(e):
+            self.about_button.config(bg='#00d4ff', font=('Arial', 16, 'bold'))
+        
+        def on_enter_exit(e):
+            self.exit_button.config(bg='#cc3333', font=('Arial', 19, 'bold'))
+        
+        def on_leave_exit(e):
+            self.exit_button.config(bg='#ff4444', font=('Arial', 18, 'bold'))
+        
+        self.play_button.bind('<Enter>', on_enter_play)
+        self.play_button.bind('<Leave>', on_leave_play)
+        self.about_button.bind('<Enter>', on_enter_about)
+        self.about_button.bind('<Leave>', on_leave_about)
+        self.exit_button.bind('<Enter>', on_enter_exit)
+        self.exit_button.bind('<Leave>', on_leave_exit)
+    
+    def exit_game(self):
+        """Виходить з програми з підтвердженням в стилі гри"""
+        # Створюємо кастомне вікно підтвердження
+        confirm_window = tk.Toplevel(self.root)
+        confirm_window.title("Вихід з гри")
+        confirm_window.configure(bg='#1a1a2e')
+        confirm_window.resizable(False, False)
+        confirm_window.grab_set()
+        
+        # Центруємо вікно
+        window_width = 420
+        window_height = 360
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        x = (screen_width - window_width) // 2
+        y = (screen_height - window_height) // 2
+        confirm_window.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        
+        main_frame = tk.Frame(confirm_window, bg='#1a1a2e', padx=30, pady=30)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Іконка
+        icon_label = tk.Label(
+            main_frame,
+            text="⚓",
+            font=('Arial', 40),
+            fg='#00d4ff',
+            bg='#1a1a2e'
+        )
+        icon_label.pack(pady=(0, 10))
+        
+        # Заголовок
+        title_label = tk.Label(
+            main_frame,
+            text="ВИХІД З ГРИ",
+            font=('Arial', 18, 'bold'),
+            fg='#ff4444',
+            bg='#1a1a2e'
+        )
+        title_label.pack(pady=(0, 8))
+        
+        # Текст питання
+        question_label = tk.Label(
+            main_frame,
+            text="Ви впевнені, що хочете\nпокинути гру?",
+            font=('Arial', 13),
+            fg='#ffffff',
+            bg='#1a1a2e',
+            justify=tk.CENTER
+        )
+        question_label.pack(pady=(0, 20))
+        
+        # Контейнер для кнопок з фіксованою шириною
+        buttons_container = tk.Frame(main_frame, bg='#1a1a2e')
+        buttons_container.pack()
+        
+        # Кнопка "Так" - фіксована ширина
+        yes_btn = tk.Button(
+            buttons_container,
+            text="✓  ТАК",
+            font=('Arial', 16, 'bold'),
+            bg='#ff4444',
+            fg='#ffffff',
+            activebackground='#cc3333',
+            relief=tk.FLAT,
+            width=12,
+            pady=12,
+            cursor='hand2',
+            command=self.root.quit
+        )
+        yes_btn.pack(pady=6)
+        
+        # Кнопка "Ні" - фіксована ширина
+        no_btn = tk.Button(
+            buttons_container,
+            text="✗  НІ",
+            font=('Arial', 16, 'bold'),
+            bg='#00ff88',
+            fg='#1a1a2e',
+            activebackground='#00cc6f',
+            relief=tk.FLAT,
+            width=12,
+            pady=12,
+            cursor='hand2',
+            command=confirm_window.destroy
+        )
+        no_btn.pack(pady=6)
+        
+        # Ефекти наведення
+        def on_enter_yes(e):
+            yes_btn.config(bg='#cc3333', font=('Arial', 17, 'bold'))
+        
+        def on_leave_yes(e):
+            yes_btn.config(bg='#ff4444', font=('Arial', 16, 'bold'))
+        
+        def on_enter_no(e):
+            no_btn.config(bg='#00cc6f', font=('Arial', 17, 'bold'))
+        
+        def on_leave_no(e):
+            no_btn.config(bg='#00ff88', font=('Arial', 16, 'bold'))
+        
+        yes_btn.bind('<Enter>', on_enter_yes)
+        yes_btn.bind('<Leave>', on_leave_yes)
+        no_btn.bind('<Enter>', on_enter_no)
+        no_btn.bind('<Leave>', on_leave_no)
+    
+    def animate_title(self):
+        """Анімація пульсації заголовка"""
+        colors = ['#00d4ff', '#00a8cc', '#0088aa', '#00a8cc', '#00d4ff']
+        self.color_index = 0
+        self.animation_running = True
+        
+        def pulse():
+            if self.animation_running and self.title_label.winfo_exists():
+                try:
+                    self.title_label.config(fg=colors[self.color_index % len(colors)])
+                    self.color_index += 1
+                    self.root.after(500, pulse)
+                except:
+                    pass
+        
+        pulse()
+    
+    def stop_animation(self):
+        """Зупиняє анімацію перед закриттям меню"""
+        self.animation_running = False
+    
+    def show_about(self):
+        """Показує інформацію про гру"""
+        about_window = tk.Toplevel(self.root)
+        about_window.title("Про гру")
+        about_window.configure(bg='#1a1a2e')
+        about_window.resizable(True, True)  # Дозволяємо зміну розміру
+        about_window.grab_set()
+        
+        # Мінімальний розмір
+        about_window.minsize(500, 600)
+        
+        # Центруємо вікно
+        window_width = 550
+        window_height = 650
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        x = (screen_width - window_width) // 2
+        y = (screen_height - window_height) // 2
+        about_window.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        
+        main_frame = tk.Frame(about_window, bg='#1a1a2e', padx=30, pady=30)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Заголовок
+        title = tk.Label(
+            main_frame,
+            text="🎮 ПРО ГРУ",
+            font=('Arial', 24, 'bold'),
+            fg='#00d4ff',
+            bg='#1a1a2e'
+        )
+        title.pack(pady=(0, 20))
+        
+        # Інформаційний блок
+        info_frame = tk.Frame(main_frame, bg='#0f3460', relief=tk.RAISED, bd=2)
+        info_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        
+        info_text = """
+🚢 МОРСЬКИЙ БІЙ - класична гра для одного гравця
+
+📋 ПРАВИЛА ГРИ:
+• Розмістіть свої кораблі на полі
+• По черзі стріляйте по полю противника
+• Мета: потопити всі кораблі противника
+
+📏 РОЗМІРИ ПОЛІВ:
+
+🔸 МАЛЕНЬКЕ (6×6):
+  • 1 Крейсер (3), 1 Есмінець (2), 3 Катери (1)
+
+🔷 НОРМАЛЬНЕ (10×10):
+  • 1 Лінкор (4), 2 Крейсери (3)
+  • 3 Есмінці (2), 4 Катери (1)
+
+🔶 ВЕЛИКЕ (14×14):
+  • 1 Авіаносець (5), 2 Лінкори (4)
+  • 3 Крейсери (3), 4 Есмінці (2), 5 Катерів (1)
+
+💡 ПОРАДИ:
+• Використовуйте розумну стратегію
+• Кораблі не торкаються один одного
+• Після потоплення клітинки навколо
+  автоматично відкриваються
+
+🎲 Бажаємо удачі, адміралe!
+        """
+        
+        info_label = tk.Label(
+            info_frame,
+            text=info_text,
+            font=('Arial', 10),
+            fg='#ffffff',
+            bg='#0f3460',
+            justify=tk.LEFT,
+            padx=20,
+            pady=15
+        )
+        info_label.pack(fill=tk.BOTH, expand=True)
+        
+        # Кнопка закриття
+        close_btn = tk.Button(
+            main_frame,
+            text="✓ Зрозуміло",
+            font=('Arial', 14, 'bold'),
+            bg='#00ff88',
+            fg='#1a1a2e',
+            activebackground='#00cc6f',
+            relief=tk.FLAT,
+            padx=40,
+            pady=12,
+            cursor='hand2',
+            command=about_window.destroy
+        )
+        close_btn.pack(pady=(20, 0))
+    
+    def start_game(self):
+        """Закриває меню та запускає гру"""
+        # Зупиняємо анімацію
+        self.stop_animation()
+        
+        # Очищаємо вікно
+        for widget in self.root.winfo_children():
+            widget.destroy()
+        
+        # Запускаємо гру з вибраним розміром
+        game = BattleshipGame(self.root, self.selected_board_size)
+
+
+class BattleshipGame:
+    """Головний клас гри Морський бій з GUI"""
+    
+    def __init__(self, root, board_size: int = 10):
+        self.root = root
+        self.root.title("Морський бій")
+        self.root.resizable(True, True)  # Дозволяємо зміну розміру
         self.root.configure(bg='#1a1a2e')
         
         # Налаштування розмірів
-        self.cell_size = 40
-        self.board_size = 10
+        self.board_size = board_size
         
-        # Ігрові поля
-        self.player_board = Board(self.board_size)
-        self.computer_board = Board(self.board_size)
+        # Розмір клітинки залежить від розміру поля
+        if board_size == 6:
+            self.cell_size = 60
+            self.root.minsize(900, 700)
+        elif board_size == 10:
+            self.cell_size = 40
+            self.root.minsize(1000, 800)
+        else:  # 14
+            self.cell_size = 35
+            self.root.minsize(1100, 850)
+        
+        # Конфігурація кораблів залежно від розміру поля
+        self.ship_sizes = self.get_ship_configuration(board_size)
+        
+        # Ігрові поля з правильною конфігурацією кораблів
+        self.player_board = Board(self.board_size, self.ship_sizes)
+        self.computer_board = Board(self.board_size, self.ship_sizes)
         
         # Стан гри: setup (розміщення), playing (гра), ended (завершено)
         self.game_phase = "setup"
         self.current_ship_index = 0
-        self.ship_sizes = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1]
         self.current_orientation = Orientation.HORIZONTAL
         
         # Статистика гри
@@ -200,6 +712,48 @@ class BattleshipGame:
         self.ai_hit_direction = None    # Напрямок послідовних влучань
         
         self.setup_ui()
+        self.center_window()
+    
+    def get_ship_configuration(self, board_size: int) -> List[int]:
+        """Повертає конфігурацію кораблів залежно від розміру поля"""
+        if board_size == 6:
+            # Маленьке поле: 5 кораблів
+            # 1 крейсер (3), 1 есмінець (2), 3 катери (1)
+            return [3, 2, 1, 1, 1]
+        elif board_size == 10:
+            # Нормальне поле: 10 кораблів (класична конфігурація)
+            # 1 лінкор (4), 2 крейсери (3), 3 есмінці (2), 4 катери (1)
+            return [4, 3, 3, 2, 2, 2, 1, 1, 1, 1]
+        else:  # 14
+            # Велике поле: 15 кораблів
+            # 1 авіаносець (5), 2 лінкори (4), 3 крейсери (3), 4 есмінці (2), 5 катерів (1)
+            return [5, 4, 4, 3, 3, 3, 2, 2, 2, 2, 1, 1, 1, 1, 1]
+    
+    def center_window(self):
+        """Центрує вікно гри на екрані з адаптивним розміром"""
+        self.root.update_idletasks()
+        
+        # Розрахунок розміру вікна на основі розміру поля
+        board_width = self.cell_size * self.board_size
+        window_width = board_width * 2 + 200  # Два поля + відступи
+        window_height = board_width + 320     # Висота поля + елементи інтерфейсу
+        
+        # Отримуємо розмір екрану
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        
+        # Адаптація під розмір екрану
+        if window_width > screen_width * 0.95:
+            window_width = int(screen_width * 0.95)
+        if window_height > screen_height * 0.9:
+            window_height = int(screen_height * 0.9)
+        
+        # Розраховуємо позицію для центрування
+        x = (screen_width - window_width) // 2
+        y = (screen_height - window_height) // 2
+        
+        # Встановлюємо розмір та позицію вікна
+        self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
         
     def setup_ui(self):
         """Створює весь графічний інтерфейс гри"""
@@ -326,6 +880,20 @@ class BattleshipGame:
             command=self.reset_game
         )
         self.reset_button.pack(side=tk.LEFT, padx=5)
+        
+        self.menu_button = tk.Button(
+            control_frame,
+            text="🏠 Головне меню",
+            font=('Arial', 12, 'bold'),
+            bg='#9b59b6',
+            fg='#ffffff',
+            activebackground='#8e44ad',
+            relief=tk.FLAT,
+            padx=20,
+            pady=10,
+            command=self.return_to_menu
+        )
+        self.menu_button.pack(side=tk.LEFT, padx=5)
         
         # Панель рахунку
         score_frame = tk.Frame(self.root, bg='#1a1a2e')
@@ -535,7 +1103,8 @@ class BattleshipGame:
     
     def get_ai_move(self) -> Tuple[Optional[int], Optional[int]]:
         """Розумне прийняття рішень ШІ про наступну атаку
-        Використовує два режими: hunt (пошук) та target (добивання)"""
+        Використовує два режими: hunt (пошук) та target (добивання)
+        Працює коректно для всіх розмірів поля (6x6, 10x10, 14x14)"""
         
         # Режим добивання: атакуємо клітинки поруч з влучаннями
         if self.ai_mode == "target" and self.ai_target_queue:
@@ -548,17 +1117,28 @@ class BattleshipGame:
             self.ai_mode = "hunt"
         
         # Режим пошуку: використовуємо шахову модель для ефективності
+        # Для різних розмірів поля збільшуємо кількість спроб
+        max_attempts = self.board_size * 20  # 120 для 6x6, 200 для 10x10, 280 для 14x14
         attempts = 0
-        while attempts < 100:
+        
+        while attempts < max_attempts:
             x = random.randint(0, self.board_size - 1)
             y = random.randint(0, self.board_size - 1)
             
             # Віддаємо перевагу шаховій моделі (зменшує простір пошуку)
+            # Після половини спроб відключаємо шахову модель для гарантованого знаходження цілі
             if not self.player_board.revealed[y][x]:
-                if (x + y) % 2 == 0 or attempts > 50:
+                if (x + y) % 2 == 0 or attempts > max_attempts // 2:
                     return x, y
             
             attempts += 1
+        
+        # Якщо не знайшли за допомогою випадкового пошуку,
+        # проходимо по всіх невідкритих клітинках
+        for y in range(self.board_size):
+            for x in range(self.board_size):
+                if not self.player_board.revealed[y][x]:
+                    return x, y
         
         return None, None
     
@@ -603,7 +1183,7 @@ class BattleshipGame:
     def place_ships_randomly(self):
         """Автоматично розміщує всі кораблі гравця у випадкових позиціях"""
         if self.game_phase == "setup":
-            self.player_board = Board(self.board_size)
+            self.player_board = Board(self.board_size, self.ship_sizes)
             self.player_board.place_ships_randomly()
             self.current_ship_index = len(self.ship_sizes)
             self.draw_boards()
@@ -803,16 +1383,16 @@ class BattleshipGame:
         # Кнопка виходу
         exit_btn = tk.Button(
             buttons_frame,
-            text="🚪 Вихід",
+            text="🏠 Меню",
             font=('Arial', 14, 'bold'),
-            bg='#ff4444',
+            bg='#9b59b6',
             fg='#ffffff',
-            activebackground='#cc3333',
+            activebackground='#8e44ad',
             relief=tk.FLAT,
             padx=30,
             pady=12,
             cursor='hand2',
-            command=self.root.quit
+            command=lambda: [game_over_window.destroy(), self.return_to_menu()]
         )
         exit_btn.pack(side=tk.LEFT, padx=5)
         
@@ -824,10 +1404,10 @@ class BattleshipGame:
             new_game_btn.config(bg='#00ff88')
         
         def on_enter_exit(e):
-            exit_btn.config(bg='#cc3333')
+            exit_btn.config(bg='#8e44ad')
         
         def on_leave_exit(e):
-            exit_btn.config(bg='#ff4444')
+            exit_btn.config(bg='#9b59b6')
         
         new_game_btn.bind('<Enter>', on_enter_new_game)
         new_game_btn.bind('<Leave>', on_leave_new_game)
@@ -836,9 +1416,9 @@ class BattleshipGame:
     
     def reset_game(self):
         """Скидає гру до початкового стану для нової партії"""
-        # Створюємо нові поля
-        self.player_board = Board(self.board_size)
-        self.computer_board = Board(self.board_size)
+        # Створюємо нові поля з правильною конфігурацією
+        self.player_board = Board(self.board_size, self.ship_sizes)
+        self.computer_board = Board(self.board_size, self.ship_sizes)
         self.game_phase = "setup"
         self.current_ship_index = 0
         self.current_orientation = Orientation.HORIZONTAL
@@ -861,11 +1441,20 @@ class BattleshipGame:
         self.update_score()
         self.draw_boards()
     
+    def return_to_menu(self):
+        """Повертає гравця до головного меню"""
+        # Очищаємо вікно
+        for widget in self.root.winfo_children():
+            widget.destroy()
+        
+        # Повертаємося до меню
+        menu = MainMenu(self.root)
+    
     def update_info_label(self):
         """Оновлює інформаційну панель з підказками для гравця"""
         if self.current_ship_index < len(self.ship_sizes):
             ship_size = self.ship_sizes[self.current_ship_index]
-            ship_names = {4: "Лінкор", 3: "Крейсер", 2: "Есмінець", 1: "Катер"}
+            ship_names = {5: "Авіаносець", 4: "Лінкор", 3: "Крейсер", 2: "Есмінець", 1: "Катер"}
             ship_name = ship_names.get(ship_size, "Корабель")
             orientation_text = "горизонтально" if self.current_orientation == Orientation.HORIZONTAL else "вертикально"
             remaining = len(self.ship_sizes) - self.current_ship_index
@@ -883,7 +1472,7 @@ class BattleshipGame:
 def main():
     """Головна функція для запуску гри"""
     root = tk.Tk()
-    game = BattleshipGame(root)
+    menu = MainMenu(root)
     root.mainloop()
 
 
